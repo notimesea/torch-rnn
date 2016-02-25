@@ -88,9 +88,9 @@ end
 
 function layer:_get_sizes(input, gradOutput)
   local c0, h0, x = self:_unpack_input(input)
-  local N, T = x:size(1), x:size(2)
+  local N, T = x:size(2), x:size(1)
   local H, D = self.hidden_dim, self.input_dim
-  check_dims(x, {N, T, D})
+  check_dims(x, {T, N, D})
   if h0 then
     check_dims(h0, {N, H})
   end
@@ -98,7 +98,7 @@ function layer:_get_sizes(input, gradOutput)
     check_dims(c0, {N, H})
   end
   if gradOutput then
-    check_dims(gradOutput, {N, T, H})
+    check_dims(gradOutput, {T, N, H})
   end
   return N, T, D, H
 end
@@ -126,9 +126,9 @@ function layer:updateOutput(input)
     if c0:nElement() == 0 or not self.remember_states then
       c0:resize(N, H):zero()
     elseif self.remember_states then
-      local prev_N, prev_T = self.cell:size(1), self.cell:size(2)
+      local prev_N, prev_T = self.cell:size(2), self.cell:size(1)
       assert(prev_N == N, 'batch sizes must be constant to remember states')
-      c0:copy(self.cell[{{}, prev_T}])
+      c0:copy(self.cell[prev_T])
     end
   end
   if not h0 then
@@ -136,9 +136,9 @@ function layer:updateOutput(input)
     if h0:nElement() == 0 or not self.remember_states then
       h0:resize(N, H):zero()
     elseif self.remember_states then
-      local prev_N, prev_T = self.output:size(1), self.output:size(2)
+      local prev_N, prev_T = self.output:size(2), self.output:size(1)
       assert(prev_N == N, 'batch sizes must be the same to remember states')
-      h0:copy(self.output[{{}, prev_T}])
+      h0:copy(self.output[prev_T])
     end
   end
 
@@ -147,15 +147,15 @@ function layer:updateOutput(input)
   local Wh = self.weight[{{D + 1, D + H}}]
 
   local h, c = self.output, self.cell
-  h:resize(N, T, H):zero()
-  c:resize(N, T, H):zero()
+  h:resize(T, N, H):zero()
+  c:resize(T, N, H):zero()
   local prev_h, prev_c = h0, c0
-  self.gates:resize(N, T, 4 * H):zero()
+  self.gates:resize(T, N, 4 * H):zero()
   for t = 1, T do
-    local cur_x = x[{{}, t}]
-    local next_h = h[{{}, t}]
-    local next_c = c[{{}, t}]
-    local cur_gates = self.gates[{{}, t}]
+    local cur_x = x[t]
+    local next_h = h[t]
+    local next_c = c[t]
+    local cur_gates = self.gates[t]
     cur_gates:addmm(bias_expand, cur_x, Wx)
     cur_gates:addmm(prev_h, Wh)
     cur_gates[{{}, {1, 3 * H}}]:sigmoid()
@@ -197,19 +197,19 @@ function layer:backward(input, gradOutput, scale)
   local grad_next_h = self.buffer1:resizeAs(h0):zero()
   local grad_next_c = self.buffer2:resizeAs(c0):zero()
   for t = T, 1, -1 do
-    local next_h, next_c = h[{{}, t}], c[{{}, t}]
+    local next_h, next_c = h[t], c[t]
     local prev_h, prev_c = nil, nil
     if t == 1 then
       prev_h, prev_c = h0, c0
     else
-      prev_h, prev_c = h[{{}, t - 1}], c[{{}, t - 1}]
+      prev_h, prev_c = h[t - 1], c[t - 1]
     end
-    grad_next_h:add(grad_h[{{}, t}])
+    grad_next_h:add(grad_h[t])
 
-    local i = self.gates[{{}, t, {1, H}}]
-    local f = self.gates[{{}, t, {H + 1, 2 * H}}]
-    local o = self.gates[{{}, t, {2 * H + 1, 3 * H}}]
-    local g = self.gates[{{}, t, {3 * H + 1, 4 * H}}]
+    local i = self.gates[{t, {}, {1, H}}]
+    local f = self.gates[{t, {}, {H + 1, 2 * H}}]
+    local o = self.gates[{t, {}, {2 * H + 1, 3 * H}}]
+    local g = self.gates[{t, {}, {3 * H + 1, 4 * H}}]
     
     local grad_a = self.grad_a_buffer:resize(N, 4 * H):zero()
     local grad_ai = grad_a[{{}, {1, H}}]
@@ -239,8 +239,8 @@ function layer:backward(input, gradOutput, scale)
     grad_ai:fill(1):add(-1, i):cmul(i):cmul(g):cmul(grad_next_c)
     grad_af:fill(1):add(-1, f):cmul(f):cmul(prev_c):cmul(grad_next_c)
     
-    grad_x[{{}, t}]:mm(grad_a, Wx:t())
-    grad_Wx:addmm(scale, x[{{}, t}]:t(), grad_a)
+    grad_x[t]:mm(grad_a, Wx:t())
+    grad_Wx:addmm(scale, x[t]:t(), grad_a)
     grad_Wh:addmm(scale, prev_h:t(), grad_a)
     local grad_a_sum = self.buffer3:resize(H):sum(grad_a, 1)
     grad_b:add(scale, grad_a_sum)

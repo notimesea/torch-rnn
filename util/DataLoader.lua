@@ -27,8 +27,8 @@ function DataLoader:__init(kwargs)
     local extra = num % (N * T)
 
     -- Chop out the extra bits at the end to make it evenly divide
-    local vx = v[{{1, num - extra}}]:view(-1, N, T):contiguous()
-    local vy = v[{{2, num - extra + 1}}]:view(-1, N, T):contiguous()
+    local vx = v[{{1, num - extra}}]:view(-1, N, T):contiguous():transpose(2, 3)
+    local vy = v[{{2, num - extra + 1}}]:view(-1, N, T):contiguous():transpose(2, 3)
 
     self.x_splits[split] = vx
     self.y_splits[split] = vy

@@ -77,15 +77,16 @@ end
 
 
 function LM:updateOutput(input)
-  local N, T = input:size(1), input:size(2)
+  local N, T = input:size(2), input:size(1)
+
   self.view1:resetSize(N * T, -1)
-  self.view2:resetSize(N, T, -1)
+  self.view2:resetSize(T, N, -1)
 
   for _, view_in in ipairs(self.bn_view_in) do
     view_in:resetSize(N * T, -1)
   end
   for _, view_out in ipairs(self.bn_view_out) do
-    view_out:resetSize(N, T, -1)
+    view_out:resetSize(T, N, -1)
   end
 
   return self.net:forward(input)
@@ -151,7 +152,7 @@ function LM:sample(kwargs)
   local sample = utils.get_kwarg(kwargs, 'sample', 1)
   local temperature = utils.get_kwarg(kwargs, 'temperature', 1)
 
-  local sampled = torch.LongTensor(1, T)
+  local sampled = torch.LongTensor(T)
   self:resetStates()
 
   local scores, first_t
@@ -160,9 +161,9 @@ function LM:sample(kwargs)
       print('Seeding with: "' .. start_text .. '"')
     end
     local x = self:encode_string(start_text):view(1, -1)
-    local T0 = x:size(2)
-    sampled[{{}, {1, T0}}]:copy(x)
-    scores = self:forward(x)[{{}, {T0, T0}}]
+    local T0 = x:size(1)
+    sampled[{{1, T0}}]:copy(x)
+    scores = self:forward(x)[T0]
     first_t = T0 + 1
   else
     if verbose > 0 then
@@ -182,11 +183,11 @@ function LM:sample(kwargs)
        probs:div(torch.sum(probs))
        next_char = torch.multinomial(probs, 1):view(1, 1)
     end
-    sampled[{{}, {t, t}}]:copy(next_char)
+    sampled[{ {t, t} }]:copy(next_char)
     scores = self:forward(next_char)
   end
 
   self:resetStates()
-  return self:decode_string(sampled[1])
+  return self:decode_string(sampled)
 end
 
